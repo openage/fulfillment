@@ -2,9 +2,13 @@ module.exports = [
     {
         url: '/',
         post: { parameters: ['x-role-key'] },
-        get: { parameters: [
-            'x-role-key',
-            { name: 'store-code', in: 'query', description: 'store code', required: true, type: 'string' }] }
+        get: {
+            parameters: [
+                'x-role-key',
+                { name: 'store-code', in: 'query', description: 'store code', required: true, type: 'string' },
+                { name: 'productName', in: 'query', description: 'store code', required: false, type: 'string' }
+            ]
+        }
     }, {
         url: '/{id}',
         get: { parameters: ['x-role-key'] }

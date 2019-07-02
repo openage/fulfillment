@@ -21,21 +21,6 @@ exports.get = async (req) => {
     return mapper.toModel(product)
 }
 
-const extractQuery = (req) => {
-    let query = {}
-
-    if (req.query.name) {
-        let productNames = req.query.name.split(',')
-        query.$or = [{
-            name: { $in: productNames }
-        }, {
-            code: { $in: productNames }
-        }]
-    }
-
-    return query
-}
-
 exports.search = async (req) => {
     const log = req.context.logger.start('api/products:search')
     let query = {}

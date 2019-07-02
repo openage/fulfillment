@@ -2,7 +2,7 @@
 
 let Client = require('node-rest-client-promise').Client
 let client = new Client()
-let ratingConfig = require('config').get('providers.bap')
+let bapConfig = require('config').get('providers.bap')
 
 /* create product as entity in billing and payment services */
 
@@ -15,10 +15,9 @@ exports.createEntity = (model, context) => {
         return
     }
 
-    let url = `${ratingConfig.url}/api/hooks/entity`
-    // let url = "http://localhost:3075/api/hooks/entity"
+    let url = `${bapConfig.url}/api/hooks/entity`
 
-    log.info(`sending request on bap url: ${url}`)
+    log.debug(`sending request on bap url: ${url}`)
 
     let args = {
         headers: {

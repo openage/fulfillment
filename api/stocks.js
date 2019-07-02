@@ -35,9 +35,7 @@ exports.get = async (req) => {
 exports.search = async (req) => {
     const log = req.context.logger.start('api/stocks:search')
 
-    const query = {}
-
-    const stockList = await stocksService.search(query, req.context)
+    const stockList = await stocksService.search(req.query, req.context)
 
     log.end()
 

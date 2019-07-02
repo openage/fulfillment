@@ -1,6 +1,5 @@
 {
-    "mocha.enabled": true,
-    "mocha.subdirectory": "C:\\g:\\Api\\inv-api\\providers",
+
     "cSpell.words": [
         "openage"
     ]

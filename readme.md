@@ -2,6 +2,7 @@ when product is created
 
 // - push to bap the product as entity
 
+
 ## when order is invoiced
 
 - products are pushed into bap as line item

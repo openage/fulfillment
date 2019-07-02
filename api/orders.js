@@ -5,8 +5,6 @@ const storeService = require('../services/stores')
 const mapper = require('../mappers/order')
 const db = require('../models')
 
-
-
 exports.create = async (req) => {
     const log = req.context.logger.start('api/order:create')
 

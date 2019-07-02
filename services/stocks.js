@@ -125,18 +125,44 @@ const update = async (model, context) => {
 
 exports.search = async (query, context) => {
     const log = context.logger.start('services/stocks:search')
-    query = {
+
+    let productQuery = {}
+    if (query.productName) {
+        productQuery = {
+            'product.name': {
+                $regex: '^' + query.productName,
+                $options: 'i'
+            }
+        }
+    }
+
+    let stockQuery = {
         'quantity': {
             $gte: query.quantity || 1
         },
-        store: context.store,
-        organization: context.organization
+        store: toObjectId(context.store.id),
+        organization: toObjectId(context.organization.id)
     }
 
-    const stock = await db.stock.find(query)
+    let stocks = await db.stock.aggregate([{
+        $match: stockQuery
+    }, {
+        $lookup: {
+            from: 'products',
+            localField: 'product',
+            foreignField: '_id',
+            as: 'product'
+        }
+    }, {
+        $unwind: '$product'
+    }, {
+        $match: productQuery
+    }, {
+        $limit: 10
+    }])
 
     log.end()
-    return stock
+    return db.stock.populate(stocks, 'batches.batch')
 }
 
 exports.buildStocks = async (data, context) => {
@@ -169,6 +195,15 @@ const findOneByQuery = async (query, context) => {
     return stock
 }
 
+const reduceQuantity = async (id, number) => {
+    return db.stock.update({
+        _id: id
+    }, {
+            $inc: { quantity: number * -1 }
+        })
+}
+
 exports.update = update
 exports.getById = getById
 exports.findOneByQuery = findOneByQuery
+exports.reduceQuantity = reduceQuantity

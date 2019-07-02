@@ -21,8 +21,8 @@ const extractBatch = (entity) => {
         quantity: entity.quantity,
         code: entity.code
     } : {
-        id: entity.toString()
-    }
+            id: entity.toString()
+        }
 }
 
 const extractLocation = (entities) => {
@@ -41,6 +41,7 @@ const extractLocation = (entities) => {
     })
     return location
 }
+
 exports.toModel = entity => {
     const model = {
         // id: entity.id,
@@ -51,37 +52,25 @@ exports.toModel = entity => {
 
     }
 
-    if (entity.product && entity.product.length) {
-        model.product = entity.product.map(item => {
-            return {
-                id: entity.id,
-                name: entity.name,
-                code: entity.code,
-                batch: extractBatch(item.batch),
-                amount: item.amount
-            }
-        })
-    }
-
     if (entity.product) {
-        model.product = entity.product._doc ? {
-            id: entity.product.id,
+        model.product = {
+            id: entity.product.id || entity.product._id.toString(),
             code: entity.product.code,
             name: entity.product.name,
             position: entity.product.position,
             pic: entity.product.pic,
-            batch: extractBatch(entity.product.batch),
+            // batch: extractBatch(entity.product.batch),
             location: extractLocation(entity.product.location)
-
-        } : {
-            id: entity.store.toString()
         }
     }
+
     if (entity.batches && entity.batches.length) {
         model.batches = entity.batches.map(item => {
             return {
-                batch: extractBatch(item.batch)
-
+                batch: extractBatch(item.batch),
+                price: item.price,
+                quantity: item.quantity,
+                unit: item.unit
             }
         })
     }
@@ -100,8 +89,8 @@ exports.toModel = entity => {
             name: entity.organization.name,
             shortName: entity.organization.shortName
         } : {
-            id: entity.organization.toString()
-        }
+                id: entity.organization.toString()
+            }
     }
 
     if (entity.store) {
@@ -114,8 +103,8 @@ exports.toModel = entity => {
             location: extractLocation(entity.store.location)
 
         } : {
-            id: entity.store.toString()
-        }
+                id: entity.store.toString()
+            }
     }
     return model
 }

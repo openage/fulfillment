@@ -49,25 +49,20 @@ exports.getById = async (id, context) => {
 
 exports.search = async (where, context) => {
     const log = context.logger.start('services/batch:search')
-    let id
-    let query = {}
-    query = {
+
+    let query = {
         'quantity': {
             $gte: where.quantity || 1
         }
     }
-    where = where || {}
-    if (where.productId !== 'my') {
+
+    if (where.productId) {
         query.product = where.productId
     } else {
-        query.product = await products.getByIdorContext(id, context)
+        return []
     }
-    const batches = await db.batch.find(query).sort({
-        'date': 1
-    }).limit(1)
-    if (!batches) {
-        throw new Error('batch not found')
-    }
+
+    const batches = await db.batch.find(query)
     log.end()
     return batches
 }
@@ -152,6 +147,15 @@ const get = async (data, context) => {
     return batch
 }
 
+const reduceQuantity = async (id, number) => {
+    return db.batch.update({
+        _id: id
+    }, {
+            $inc: { quantity: number * -1 }
+        })
+}
+
 exports.getByCode = getByCode
 exports.get = get
 exports.create = create
+exports.reduceQuantity = reduceQuantity

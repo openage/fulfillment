@@ -4,7 +4,7 @@ const mongoose = require('mongoose')
 module.exports = {
     quantity: {
         type: Number,
-        min: [0, 'stock not found']
+        min: [0, 'out of stock']
     },
     unit: String, // boxes, kg, bottles,ml, tablets
     position: String, // rack no/shelf no

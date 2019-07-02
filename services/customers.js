@@ -44,11 +44,11 @@ const get = async (query, context) => {
     let customer = null
     if (typeof query === 'string') {
         if (query.isObjectId()) {
-            customer = await db.customer.findById(query)
+            customer = await db.customer.findById(query).populate('user')
         }
         customer = await getCustomerByRole({ key: query }, context) // todo
     } else if (query.id) {
-        customer = await db.customer.findById(query.id)
+        customer = await db.customer.findById(query.id).populate('user')
     } else if (query.role) {
         customer = await getCustomerByRole(query.role, context)
     }
@@ -71,9 +71,20 @@ const getOrCreate = async (data, context) => {
 exports.search = async (query, context) => {
     context.logger.start('services/customers:search')
 
-    return db.category.find(query)
+    return db.customer.find(query)
+}
+
+const getById = async (id, context) => {
+    context.logger.start('services/customers:getById')
+
+    if (!id) {
+        throw new Error('id not found')
+    }
+
+    return db.customer.findById(id).populate('user')
 }
 
 exports.getOrCreate = getOrCreate
 exports.get = get
 exports.create = create
+exports.getById = getById

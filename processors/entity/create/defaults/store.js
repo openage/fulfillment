@@ -11,7 +11,7 @@ exports.process = async (data, context) => {
 
     if (!store) { return }
 
-    ratingProvider.createEntity({
+    return ratingProvider.createEntity({
         entityId: store.id,
         entityType: 'store',
         role: context.role

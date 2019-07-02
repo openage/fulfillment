@@ -1,6 +1,6 @@
 "use strict";
 const productService = require("./../../../services/products");
-const bapProvider = require("./../../../providers/bap");
+const bapProvider = require("../../../providers/bap/bap");
 
 exports.process = async (data, context) => {
   let product = await productService.getById(data.id, context);
