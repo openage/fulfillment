@@ -1,17 +1,22 @@
 'use strict'
+const pic = require('./pic')
 
-exports.toModel = entity => {
-    const model = {
-        id: entity.id,
-        name: entity.name,
-        code: entity.code
+exports.toModel = (entity, context) => {
+    if (!entity) {
+        return
     }
 
-    return model
-}
+    if (entity._bsontype === 'ObjectID') {
+        return {
+            id: entity.toString()
+        }
+    }
+    return {
+        id: entity.id,
+        code: entity.code,
+        name: entity.name,
+        description: entity.description,
+        pic: pic.toModel(entity.pic, context)
 
-exports.toSearchModel = entities => {
-    return entities.map((entity) => {
-        return exports.toModel(entity)
-    })
+    }
 }

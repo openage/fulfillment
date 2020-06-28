@@ -4,7 +4,6 @@ let Client = require('node-rest-client-promise').Client
 let client = new Client()
 let bapConfig = require('config').get('providers.bap')
 
-
 exports.create = (model, roleKey, context) => {
     let log = context.logger.start('creating invoice on billing and payments services ...')
 

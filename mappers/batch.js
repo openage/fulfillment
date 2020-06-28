@@ -1,6 +1,15 @@
 'use strict'
 
-exports.toModel = entity => {
+exports.toModel = (entity, context) => {
+    if (!entity) {
+        return
+    }
+
+    if (entity._bsontype === 'ObjectID') {
+        return {
+            id: entity.toString()
+        }
+    }
     const model = {
         id: entity.id,
         code: entity.code,
@@ -15,8 +24,8 @@ exports.toModel = entity => {
             code: entity.product.code,
             name: entity.product.name
         } : {
-            id: entity.product.toString()
-        }
+                id: entity.product.toString()
+            }
     }
     return model
 }

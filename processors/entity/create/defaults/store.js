@@ -13,7 +13,13 @@ exports.process = async (data, context) => {
 
     return ratingProvider.createEntity({
         entityId: store.id,
-        entityType: 'store',
+        type: {
+            name: 'store',
+            config: {
+                url: `http://inv-api-dev.m-sas.com/api/store/${entityId}`,
+                action: 'PUT'
+            }
+        },
         role: context.role
     }, context).then((data) => {
         log.info('entity successfully created')

@@ -1,16 +1,17 @@
-'use strcit'
+'use strict'
 
 const mongoose = require('mongoose')
 
 module.exports = {
-    name: String,
     code: String,
-    tenant: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'tenant'
+    name: String,
+    description: String,
+    pic: {
+        url: String,
+        thumbnail: String
     },
-    organization: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'organization'
-    }
+    status: String,
+    parent: { type: mongoose.Schema.Types.ObjectId, ref: 'category' },
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'organization' },
+    tenant: { type: mongoose.Schema.Types.ObjectId, ref: 'tenant' }
 }

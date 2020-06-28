@@ -33,16 +33,19 @@
     },
     "providers": {
         "directory": {
-            "url": "http://localhost:3001/api"
+            "url": "https://dev.openage.in/directory/api"
         },
         "send-it": {
-            "url": "http://localhost:3002/api"
+            "url": "https://dev.openage.in/sendIt/api"
         },
-        "billing": {
-            "url": "http://localhost:3005/api"
-        },
-        "discover": {
-            "url": "http://localhost:3007/api"
+        "bap": {
+            "url": "https://dev.openage.in/bap/api"
         }
+        "discover": {
+            "url": "https://dev.openage.in/discover/api"
+        }
+    },
+    "organization": {
+        "timeZone": "IST"
     }
 }

@@ -1,75 +1,133 @@
 'use strict'
 const db = require('../models')
 
-const getByCode = async (code, context) => {
-    context.logger.start('services/categories:getByCode')
+const set = async (model, entity, context) => {
+    if (model.code && entity.code !== model.code.toLowerCase()) {
+        if (await this.get(model.code, context)) {
+            throw new Error(`'${model.code}' already exists`)
+        }
 
-    let clause = context.where().add('code', code).clause
+        entity.code = model.code.toLowerCase()
+    }
 
-    const category = await db.category.find(clause).populate('organization tenant')
-    return category
-}
+    if (model.name) {
+        entity.name = model.name
+    }
+    if (model.description) {
+        entity.description = model.description
+    }
 
-const create = async (model, context) => {
-    const log = context.logger.start('services/categories:create')
-    let category
-
-    // category = await getByCode(model.code, context)
-    // if (category) {
-    //     throw new Error(`category ${model.code} already exists`)
-    // }
-
-    model.organization = context.organization
-    model.tenant = context.tenant
-    category = await new db.category(model).save()
-
-    log.end()
-    return category
-}
-
-exports.getById = async (id, context) => {
-    const log = context.logger.start('services/categories:get')
-
-    const category = await db.category.findById(id).populate('organization tenant')
-
-    log.end()
-    return category
-}
-
-exports.search = async (query, context) => {
-    const log = context.logger.start('services/categories:search')
-
-    const categories = await db.category.find(query).populate('organization tenant')
-
-    log.end()
-
-    return categories
-}
-
-exports.get = async (data, context) => {
-    context.logger.start('services/categories:get')
-    let category
-    if (typeof data === 'string') {
-        if (data.isObjectId()) {
-            category = await db.category.findById(data)
-        } else {
-            category = await getByCode(data, context)
+    if (model.pic) {
+        let url = model.pic.url || model.pic
+        entity.pic = {
+            url: url,
+            thumbnail: model.pic.thumbnail || url
         }
     }
 
-    if (data.id) {
-        category = await db.category.findById(data.id)
+    if (model.status) {
+        entity.status = model.status
     }
-
-    if (data.code) {
-        category = await getByCode(data.code, context)
-    }
-
-    if (!category) {
-        category = await create(data, context)
-    }
-    return category
 }
 
-exports.getByCode = getByCode
-exports.create = create
+exports.create = async (model, context) => {
+    const log = context.logger.start('services/categories:create')
+    if (!model.code) {
+        throw new Error('code is required')
+    }
+    if (!model.name) {
+        throw new Error('name is required')
+    }
+
+    let entity = new db.category({
+        status: 'active',
+        tenant: context.tenant
+    })
+
+    await set(model, entity, context)
+    await entity.save()
+
+    log.end()
+
+    return entity
+}
+
+exports.update = async (id, model, context) => {
+    context.logger.debug('services/categories:update')
+
+    let entity = await this.get(id, context)
+
+    await set(model, entity, context)
+    await entity.save()
+
+    return entity
+}
+
+exports.remove = async (id, context) => {
+    let entity = await this.get(id, context)
+    entity.status = 'inactive'
+    await entity.save()
+}
+
+exports.search = async (query, page, context) => {
+    let log = context.logger.start('services/categories:search')
+    query = query || {}
+
+    let where = {
+        status: 'active',
+        tenant: context.tenant
+    }
+
+    if (query.status) {
+        where.status = query.status
+    }
+
+    if (query.name) {
+        where['name'] = {
+            $regex: query.name,
+            $options: 'i'
+        }
+    }
+
+    const count = await db.category.find(where).count()
+    let items
+    if (page) {
+        items = await db.category.find(where).skip(page.skip).limit(page.limit)
+    } else {
+        items = await db.category.find(where)
+    }
+
+    log.end()
+
+    return {
+        count: count,
+        items: items
+    }
+}
+
+exports.get = async (query, context) => {
+    context.logger.start('services/categories:get')
+    if (!query) {
+        return
+    }
+    if (typeof query === 'string') {
+        if (query.isObjectId()) {
+            return db.category.findById(query)
+        } else {
+            return db.category.findOne({
+                code: query.toLowerCase(),
+                tenant: context.tenant
+            })
+        }
+    }
+    if (query.id) {
+        return db.category.findById(query.id)
+    }
+
+    if (query.code) {
+        return db.category.findOne({
+            code: query.code.toLowerCase(),
+            tenant: context.tenant
+        })
+    }
+}

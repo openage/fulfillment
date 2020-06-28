@@ -1,14 +1,67 @@
 'use strict'
 const db = require('../models')
 const offline = require('@open-age/offline-processor')
+const categories = require('./categories')
+const populate = 'organization'
 
-const set = (model, entity, context) => {
+const set = async (model, entity, context) => {
+    if (model.code && entity.code !== model.code.toLowerCase()) {
+        if (await this.get({ code: model.code }, context)) {
+            throw new Error(`'${model.code}' already exists`)
+        }
+
+        entity.code = model.code.toLowerCase()
+    }
+
+    if (model.name) {
+        entity.name = model.name
+    }
+    if (model.description) {
+        entity.description = model.description
+    }
+
+    if (model.pic) {
+        let url = model.pic.url || model.pic
+        entity.pic = {
+            url: url,
+            thumbnail: model.pic.thumbnail || url
+        }
+    }
+
     if (model.status) {
         entity.status = model.status
     }
 
-    if (model.location) {
-        entity.location = model.location
+    if (model.workingStatus) {
+        entity.workingStatus = model.workingStatus
+    }
+
+    if (model.timings) {
+        entity.timings = model.timings || {}
+
+        if (model.timings.opening) {
+            entity.timings.opening = model.timings.opening
+        }
+
+        if (model.timings.closing) {
+            entity.timings.closing = model.timings.closing
+        }
+
+        if (model.timings.lunchStart) {
+            entity.timings.lunchStart = model.timings.lunchStart
+        }
+
+        if (model.timings.lunchEnd) {
+            entity.timings.lunchEnd = model.timings.lunchEnd
+        }
+
+        if (model.timings.teaStart) {
+            entity.timings.teaStart = model.timings.teaStart
+        }
+
+        if (model.timings.teaEnd) {
+            entity.timings.teaEnd = model.timings.teaEnd
+        }
     }
 
     if (model.address) {
@@ -41,136 +94,168 @@ const set = (model, entity, context) => {
         if (model.address.country) {
             entity.address.country = model.address.country
         }
-    }
 
-    if (model.rating) {
-        entity.rating = model.rating || {}
-
-        if (model.rating.value) {
-            entity.rating.value = model.rating.value
+        if (model.address.lat) {
+            entity.address.lat = model.address.lat
         }
 
-        if (model.rating.rateCount) {
-            entity.rating.rateCount = model.rating.rateCount
-        }
-
-        if (model.rating.reviewCount) {
-            entity.rating.reviewCount = model.rating.reviewCount
-        }
-
-        if (model.rating.oneStar) {
-            entity.rating.oneStar = model.rating.oneStar
-        }
-
-        if (model.rating.twoStar) {
-            entity.rating.twoStar = model.rating.twoStar
-        }
-
-        if (model.rating.threeStar) {
-            entity.rating.threeStar = model.rating.threeStar
-        }
-
-        if (model.rating.fourStar) {
-            entity.rating.fourStar = model.rating.fourStar
-        }
-
-        if (model.rating.fiveStar) {
-            entity.rating.fiveStar = model.rating.fiveStar
+        if (model.address.long) {
+            entity.address.long = model.address.long
         }
     }
 
-    if (model.contacts) {
-        entity.contacts = model.contacts
+    if (model.category) {
+        entity.category = await categories.get(model.category, context)
+        if (!entity.category) {
+            entity.category = await categories.create(model.category, context)
+        }
     }
+
+    if (model.tags && model.tags[0]) {
+        entity.tags = []
+        model.tags.forEach(tag => {
+            entity.tags.push(tag.toString())
+        })
+    }
+
 }
 
-const create = async (model, context) => {
+exports.create = async (model, context) => {
     const log = context.logger.start('services/stores:create')
-    let code
-    if (model.code) {
-        code = model.code
-    } else {
-        code = await db.store.find({ organization: (context.organization).id }).count() + 1
+    if (!model.code) {
+        throw new Error('code is required')
     }
-    const store = await new db.store({
-        location: model.location,
-        code: code,
-        address: model.address,
-        tenant: (context.tenant).id,
-        organization: (context.organization).id
-    }).save()
+    if (!model.name) {
+        throw new Error('name is required')
+    }
 
-    context.processSync = true
-    offline.queue('entity', 'create', {
-        id: store.id
-    }, context)
+    const entity = new db.store({
+        status: 'active',
+        organization: context.organization,
+        tenant: context.tenant
+    })
 
-    log.end()
-    return store
-}
+    await set(model, entity, context)
+    await entity.save()
 
-const getById = async (id, context) => {
-    const log = context.logger.start('services/stores:getById')
-
-    const store = await db.store.findById(id).populate('organization')
+    await offline.queue('store', 'create', entity, context)
 
     log.end()
-    return store
+    return entity
 }
 
-exports.update = async (model, id, context) => {
-    const log = context.logger.start('services/stores:update')
+exports.update = async (id, model, context) => {
+    context.logger.debug('services/stores:update')
 
-    const store = await db.store.findById(id)
+    let entity = await this.get(id, context)
 
-    set(model, store, context)
+    await set(model, entity, context)
+    await entity.save()
 
-    await store.save()
-    log.end()
-    return getById(store.id, context)
+    await offline.queue('store', 'update', entity, context)
+
+    return entity
 }
-const get = async (query, context) => {
-    let log = context.logger.start('services/stores:get')
-    let store
+
+exports.remove = async (id, context) => {
+    let entity = await this.get(id, context)
+    entity.status = 'inactive'
+    await entity.save()
+}
+
+exports.get = async (query, context) => {
+    context.logger.start('services/stores:get')
+    if (!query) {
+        return
+    }
     if (typeof query === 'string') {
         if (query.toObjectId()) {
-            store = await db.store.findById(query)
+            return db.store.findById(query).populate(populate)
         } else {
-            store = await db.store.findOne({
-                code: query,
+            return db.store.findOne({
+                code: query.toLowerCase(),
                 organization: context.organization
-            })
-            if (!store) {
-                store = await create({
-                    code: query.code,
-                    organization: context.organization.id || context.organization.toString()
-                }, context)
-            }
+            }).populate(populate)
         }
-    } else if (query.id) {
-        store = await db.store.findById(query.id).populate('organization')
-    } else if (query.code) {
-        store = await db.store.findOne({
-            code: query.code,
-            organization: context.organization
-        }).populate('organization')
-    } else if (context.store.code) {
-        store = await db.store.findOne({
-            code: context.store.code,
-            organization: context.organization
-        }).populate('organization')
     }
-
-    if (!store) {
-        store = await create({
-            code: query.code,
-            organization: context.organization.id || context.organization.toString()
-        }, context).populate('organization')
+    if (query.id) {
+        return db.store.findById(query.id).populate(populate)
     }
-    log.end()
-    return store ? store.populate('organization') : null
+    if (query.code) {
+        return db.store.findOne({
+            code: query.code.toLowerCase,
+            organization: context.organization
+        }).populate(populate)
+    }
 }
 
-exports.create = create
-exports.getById = getById
-exports.get = get
+exports.search = async (query, page, context) => {
+    const log = context.logger.start('services/stores:search')
+
+    let where = {
+        tenant: context.tenant
+    }
+    let sortQuery = {}
+
+    // const nearby = !!(req.query.nearby === 'true' || req.query.nearby)
+
+    // if (!nearby) {
+    //     sortQuery['rating.rate'] = -1
+    // }
+
+    // if (req.query.cityName) {
+    //     query['$or'] = [{
+    //         'address.city': {
+    //             $regex: `^${req.query.cityName}$`,
+    //             $options: 'i'
+    //         }
+    //     }, {
+    //         'address.district': {
+    //             $regex: `^${req.query.cityName}$`,
+    //             $options: 'i'
+    //         }
+    //     }]
+    // }
+
+    // if (nearby) {
+    //     query['location.coordinates'] = {
+    //         $nearSphere: {
+    //             $geometry: {
+    //                 type: 'Point',
+    //                 coordinates: [
+    //                     req.query.longitude,
+    //                     req.query.latitude
+    //                 ]
+    //             },
+    //             $minDistance: req.query.minDistance || 0, // values in meters
+    //             $maxDistance: req.query.maxDistance || 100000
+    //         }
+    //     }
+    // }
+
+    if (context.organization) {
+        where.organization = context.organization
+    }
+    
+    if (query.tag) {
+        where.tags = {
+            $regex: '^' + query.tag,
+            $options: 'i'
+        }
+    }
+
+    const count = await db.store.find(where).count()
+    let items
+    if (page) {
+        items = await db.store.find(where).skip(page.skip).limit(page.limit).populate(populate)
+    } else {
+        items = await db.store.find(where).populate(populate)
+    }
+
+    log.end()
+
+    return {
+        count: count,
+        items: items
+    }
+}

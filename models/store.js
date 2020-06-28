@@ -2,19 +2,14 @@
 const mongoose = require('mongoose')
 
 module.exports = {
-    name: String,
     code: String,
+    name: String,
+    description: String,
     shortName: String,
+    tags: [String],
     pic: {
         url: String,
         thumbnail: String
-    },
-    about: String,
-    images: String, // TODO: obsolete
-    contacts: [{ }],
-    proof: {
-        type: String,
-        picUrl: String
     },
 
     address: {
@@ -24,7 +19,9 @@ module.exports = {
         city: String,
         state: String,
         pinCode: String,
-        country: String
+        country: String,
+        lat: Number,
+        long: Number
     },
 
     status: {
@@ -33,57 +30,42 @@ module.exports = {
         enum: ['active', 'inactive']
     },
 
-    location: {
-        coordinates: {
-            type: [Number], // [<longitude>, <latitude>]
-            index: '2dsphere' // create the geospatial index
-        },
-        name: String,
-        description: String,
-        distance: String,
-        duration: String
+    workingStatus: {
+        type: String,
+        default: 'closed',
+        enum: ['open', 'closed']
+    },
+
+    category: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'category'
+    },
+
+    timings: {
+        opening: Date,
+        closing: Date,
+        lunchStart: Date,
+        lunchEnd: Date,
+        teaStart: Date,
+        teaEnd: Date
     },
 
     rating: {
-        value: {
-            type: Number,
-            default: 0
-        },
-        rateCount: {
-            type: Number,
-            default: 0
-        },
-        reviewCount: {
-            type: Number,
-            default: 0
-        },
-        oneStar: {
-            type: Number,
-            default: 0
-        },
-        twoStar: {
-            type: Number,
-            default: 0
-        },
-        threeStar: {
-            type: Number,
-            default: 0
-        },
-        fourStar: {
-            type: Number,
-            default: 0
-        },
-        fiveStar: {
-            type: Number,
-            default: 0
-        }
+        value: { type: Number, default: 0 },
+        count: { type: Number, default: 0 },
+        reviewCount: { type: Number, default: 0 },
+        oneStar: { type: Number, default: 0 },
+        twoStar: { type: Number, default: 0 },
+        threeStar: { type: Number, default: 0 },
+        fourStar: { type: Number, default: 0 },
+        fiveStar: { type: Number, default: 0 }
     },
 
-    pan: String,
     organization: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'organization'
     },
+
     tenant: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'tenant'

@@ -5,21 +5,30 @@ const mongoose = require('mongoose')
 module.exports = {
     role: {
         id: String,
-        code: String,
         key: String,
-        permissions: []
+        code: String,
+        permissions: [{
+            type: String
+        }]
     },
-    employee: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'employee'
+    email: String,
+    phone: String,
+    code: String,
+    profile: {
+        firstName: String,
+        lastName: String,
+        gender: String,
+        dob: Date,
+        pic: {
+            url: String,
+            thumbnail: String
+        }
     },
-    organization: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'organization'
-    },
-    tenant: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'tenant'
-    }
+    config: Object,
 
+    status: String,
+    lastSeen: Date,
+
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'organization' },
+    tenant: { type: mongoose.Schema.Types.ObjectId, ref: 'tenant' }
 }

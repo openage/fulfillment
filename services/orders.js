@@ -1,65 +1,93 @@
 
 const db = require('../models')
 const customerService = require('./customers')
+const organizationService = require('./organizations')
+const posService = require('./pos')
+const userService = require('./users')
+const storeService = require('./stores')
 const productService = require('./products')
-const batchesService = require('./batches')
+// const batchesService = require('./batches')
 const stockService = require('./stocks')
-const bapInvoiceProvider = require('../providers/bap/invoice')
+const bapInvoice = require('../providers/bap/invoice')
 const offline = require('@open-age/offline-processor')
 
-const generateInvoice = async (order, context) => {
-    let log = context.logger.start('services/orders:generateInvoice')
+const populate = 'products.product customer user pos store organization '
 
-    let customerId = order.customer._doc ? order.customer.id : order.customer.toString()
-    let customer = await customerService.getById(customerId, context)
+const set = async (model, entity, context) => {
+    if (model.products) {
+        entity.products = []
 
-    if (!customer) {
-        throw new Error('customer not found')
+        for (const item of model.products) {
+            entity.products.push({
+                product: await productService.get(item.product, context),
+                amount: item.amount,
+                quantity: item.quantity
+            })
+        }
     }
 
-    let model = {
+    if (model.user) {
+        entity.user = await userService.get(model.user, context)
+    } else if (!entity.user && context.organization) {
+        entity.user = context.user
+    }
+
+    if (model.customer) {
+        entity.customer = await customerService.get(model.customer, context)
+    }
+
+    if (model.pos) {
+        entity.pos = await posService.get(model.pos, context)
+    }
+
+    if (model.store) {
+        entity.store = await storeService.get(model.store, context)
+    }
+
+    if (model.organization) {
+        entity.organization = await organizationService.get(model.organization, context)
+    }
+
+    if (model.status && model.status !== entity.status) {
+        if (model.status === 'invoiced') {
+            await reduceStock(entity, context)
+            entity.invoice = await bapInvoice.create(toInvoiceModel(entity), context)
+        }
+
+        entity.status = model.status
+    }
+}
+
+const toInvoiceModel = (order) => {
+    return {
         order: {
-            id: order.id || order._id.toString(),
+            id: order.id,
             code: order.code
         },
         service: {
             code: 'inventory'
         },
-        seller: {
-            role: context.role
-        },
-        buyer: {
-            role: customer.user.role
-        },
-        lineItems: []
+        seller: order.user,
+        buyer: order.customer.user,
+        lineItems: order.products(item => {
+            return {
+                consumption: {
+                    quantity: item.quantity
+                },
+                parts: [{
+                    code: 'price',
+                    description: 'Price',
+                    amount: item.product.price || 0
+                }],
+                entity: {
+                    id: item.product.code,
+                    name: item.product.name,
+                    type: 'product'
+                },
+                description: item.product.name
+            }
+        })
     }
-
-    for (let item of order.products) {
-        let lineItem = {
-            consumption: {
-                quantity: item.quantity
-            },
-            parts: [{
-                code: 'price',
-                description: 'Price',
-                amount: item.product.price || 0
-            }],
-            entity: {
-                entityId: item.product._doc ? item.product.id : item.product.toString(),
-                name: item.product._doc ? item.product.name : undefined,
-                type: {
-                    code: 'medicines'
-                }
-            },
-            description: item.product._doc ? item.product.name : undefined
-        }
-        model.lineItems.push(lineItem)
-    }
-
-    let invoice = await bapInvoiceProvider.create(model, context.role.key, context)
-
-    log.end()
-    return invoice
 }
 
 const reduceStock = async (order, context) => {
@@ -70,20 +98,9 @@ const reduceStock = async (order, context) => {
     }
 
     for (let item of order.products) {
-        let productId = item.product._doc ? item.product.id : item.product.toString()
-        let stock = await stockService.findOneByQuery({
-            product: productId
+        let stock = await stockService.get({
+            product: item.product
         }, context)
-
-        let batchId = item.batch._doc ? item.batch.id : item.batch.toString()
-
-        let batch = await batchesService.getById(batchId, context)
-
-        if ((item.quantity > 0) && (batch.quantity < item.quantity)) {
-            throw new Error('batch out of stock')
-        } else {
-            await batchesService.reduceQuantity(batchId, item.quantity)
-        }
 
         if ((item.quantity > 0) && (stock.quantity < item.quantity)) {
             throw new Error('Out of stock')
@@ -93,129 +110,102 @@ const reduceStock = async (order, context) => {
     }
 
     log.end()
-    return
 }
 
 exports.create = async (model, context) => {
     const log = context.logger.start('services/orders:create')
 
-    let customerData = model.customer || {
-        role: context.role,
-        organization: context.organization
-    }
-
-    let customer = await customerService.getOrCreate(customerData, context)
-
-    if (!customer) {
-        throw new Error('customer not found')
-    }
-
-    model.customer = customer
-
-    if (!model.organization) {
-        model.organization = context.organization.id
-    }
-
-    if (context.employee) {
-        model.employee = context.employee
-    }
-
-    let productList = []
-
-    for (const item of model.products) {
-        let product = await productService.get(item.product, context)
-
-        if (item.batch) {
-            let batch = await batchesService.get(item.batch, context)
-
-            if (batch.quantity < item.quantity) {
-                throw new Error(`only '${batch.quantity}' item(s) available in batch '${batch.code}'`)
-            }
-
-            productList.push({
-                product: product,
-                batch: batch,
-                amount: item.amount,
-                quantity: item.quantity
-            })
-        } else {
-            let batchResult = await batchesService.findByQuantity(item.quantity, item.product, context)
-
-            if (!batchResult && !batchResult.length) {
-                throw new Error(`this item is out of stock`)
-            }
-
-            for (const resultItem of batchResult.items) {
-                let amount = (resultItem.price || 0) * (resultItem.quantity || 0)
-                productList.push({
-                    product: product,
-                    batch: resultItem.batch,
-                    price: resultItem.price,
-                    amount: amount,
-                    quantity: resultItem.quantity
-                })
-            }
-        }
-    }
-
-    model.products = productList
-
-    const order = await new db.order(model)
-
-    if (model.status === 'invoiced') {
-        await reduceStock(order, context)
-        const invoice = await generateInvoice(order, context)
-        order.invoice = invoice
-    }
-
-    await order.save()
-
-    log.end()
-    return db.order.findById(order.id).populate({
-        path: 'customer employee organization store products.product products.batch'
-    })
-}
-
-const getById = async (id, context) => {
-    const log = context.logger.start('services/order:get')
-
-    const order = await db.order.findById(id).populate({
-        path: 'customer employee organization store products.product products.batch'
+    const entity = new db.order({
+        organization: context.organization,
+        tenant: context.tenant
     })
 
+    await set(model, entity, context)
+    await entity.save()
+    await offline.queue('order', entity.status, entity, context)
     log.end()
-
-    return order
+    return entity
 }
 
-exports.update = async (data, id, context) => {
+exports.update = async (id, model, context) => {
     const log = context.logger.start('services/order:update')
 
-    const order = await db.order.findById(id)
+    let entity = await this.get(id, context)
 
-    if (data.status) {
-        order.status = data.status
-        order.statusLogs = order.statusLogs || []
-        order.statusLogs.push({
-            date: new Date(),
-            old: order.status,
-            new: data.status
-        })
+    let oldStatus = entity.status
+
+    await set(model, entity, context)
+    await entity.save()
+    if (oldStatus !== entity.status) {
+        await offline.queue('order', entity.status, entity, context)
     }
 
-    if (data.status === 'invoiced' && !order.invoice && !order.invoice.id) {
-        await reduceStock(order, context)
-        const invoice = await generateInvoice(order, context)
-        order.invoice = invoice
-        await order.save()
+    return entity
+}
+
+exports.search = async (query, page, context) => {
+    const log = context.logger.start('api/order:search')
+    const where = {
+        tenant: context.tenant
+    }
+
+    if (query.status) {
+        where.status = query.status
+    }
+
+    let items
+    if (context.organization) {
+        where.user = context.user
+        where.organization = context.organization
+        items = await db.order.find(where).populate(populate)
     } else {
-        await order.save()
-        context.processSync = true
-        offline.queue('order', order.status, { id: order.id }, context)
+        items = await db.order.aggregate([{
+            $match: where
+        }, {
+            $lookup: {
+                from: 'customers',
+                localField: 'customer',
+                foreignField: '_id',
+                as: 'customer'
+            }
+        }, {
+            $unwind: '$customer'
+        }, {
+            $match: {
+                'customer.user': context.user
+            }
+        }])
     }
 
     log.end()
-    return getById(order.id, context)
+
+    return {
+        items: items
+    }
 }
 
-exports.getById = getById
+exports.get = async (query, context) => {
+    context.logger.start('services/orders:get')
+    if (typeof query === 'string') {
+        if (query.isObjectId()) {
+            return db.order.findById(query).populate(populate)
+        } else {
+            return db.order.findOne({
+                code: query.toLocaleUpperCase(),
+                organization: context.organization
+            }).populate(populate)
+        }
+    }
+    if (query._doc) {
+        return query
+    }
+    if (query.id) {
+        return db.order.findById(query.id).populate(populate)
+    }
+    if (query.code) {
+        return db.order.findOne({
+            code: query.code.toLocaleUpperCase(),
+            organization: context.organization
+        }).populate(populate)
+    }
+}

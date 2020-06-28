@@ -1,22 +1,15 @@
 'use strict'
+const pic = require('./pic')
 
-exports.toModel = (entity) => {
+exports.toModel = (entity, context) => {
     if (!entity) {
         return {}
     }
-    let model = {
+    return {
         firstName: entity.firstName,
         lastName: entity.lastName,
         dob: entity.dob,
-        gender: entity.gender
+        gender: entity.gender,
+        pic: pic.toModel(entity.pic, context)
     }
-
-    if (entity.pic) {
-        model.pic = {
-            url: entity.pic.url,
-            thumbnail: entity.pic.thumbnail
-        }
-    }
-
-    return model
 }

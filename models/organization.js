@@ -3,15 +3,37 @@
 const mongoose = require('mongoose')
 
 module.exports = {
+    code: { type: String, lowercase: true },
     name: String,
     shortName: String,
-    code: String, // sku,
-
     logo: {
         url: String,
         thumbnail: String
     },
-
+    config: Object,
+    services: [{
+        logo: String,
+        code: String,
+        name: String,
+        url: String, // api root url
+        hooks: {
+            project: {
+                onCreate: String,
+                onUpdate: String,
+                onDelete: String
+            },
+            task: {
+                onCreate: String,
+                onUpdate: String,
+                onDelete: String
+            }
+        }
+    }],
+    owner: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'user'
+    },
+    meta: Object,
     address: {
         line1: String,
         line2: String,
@@ -25,12 +47,8 @@ module.exports = {
     status: {
         type: String,
         default: 'active',
-        enum: ['active', 'inactive']
+        enum: ['new', 'active', 'inactive']
     },
-    vendors: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'vendor'
-    }],
     tenant: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'tenant'

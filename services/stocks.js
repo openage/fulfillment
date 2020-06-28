@@ -1,129 +1,80 @@
 'use strict'
 const db = require('../models')
-const storeService = require('../services/stores')
-const batchService = require('../services/batches')
-const productService = require('../services/products')
+const storeService = require('./stores')
+const productService = require('./products')
 
-const set = (model, entity, context) => {
+const offline = require('@open-age/offline-processor')
+
+const populate = 'product store organization'
+
+const set = async (model, entity, context) => {
+    if (model.price) {
+        entity.price = model.price
+    }
     if (model.quantity) {
         entity.quantity = model.quantity
+    }
+
+    if (model.unit) {
+        entity.unit = model.unit
     }
 
     if (model.leadQuantity) {
         entity.leadQuantity = model.leadQuantity
     }
-    if (model.unit) {
-        entity.unit = model.unit
-    }
 
     if (model.position) {
         entity.position = model.position
     }
-    if (model.price) {
-        entity.price = model.price
-    }
+
     if (model.batches) {
-        for (let index = 0; index < model.batches.length; index++) {
-            if (model.batches[index]) {
-                entity.batches = model.batches
+        entity.batches = model.batches.map(b => {
+            return {
+                date: b.date,
+                expiry: b.expiry,
+                price: b.price,
+                quantity: b.quantity,
+                unit: b.unit
             }
-        }
+        })
+    }
+
+    if (model.store) {
+        entity.store = await storeService.get(model.store, context)
     }
 }
 
 exports.create = async (model, context) => {
     const log = context.logger.start('services/stocks:create')
 
-    let product = await productService.get(model.product, context) // get or create a product
-    model.product = product
-    let batchList = []
+    const entity = await new db.stock({
+        product: await productService.get(model.product, context),
+        organization: context.organization,
+        tenant: context.tenant
+    })
+    await set(model, entity, context)
+    await entity.save()
 
-    for (let index = 0; index < model.batches.length; index++) {
-        let item = model.batches[index]
-        let obj = {}
-        obj.batch = (await batchService.get({
-            product: model.product,
-            code: item.batch.code,
-            quantity: item.batch.quantity,
-            expiry: item.batch.expiry
-        }, context))
-        obj.quantity = obj.batch.quantity || 0
-        obj.price = item.price
-        obj.unit = item.unit
-        batchList.push(obj)
-    }
-
-    model.batches = batchList
-    let store
-    if (model.store) {
-        store = await storeService.get(model.store, context)
-    } else { // get create store
-        store = context.store
-    }
-    if (!store) {
-        throw new Error(`store is required`)
-    }
-    model.store = store
-    let stock = await findOneByQuery({ product: product.id }, context) // get stock for the product
-
-    if (!model.organization) {
-        model.organization = context.organization.id
-    }
-
-    if (!stock) {
-        stock = await new db.stock({
-            quantity: model.quantity,
-            unit: model.unit,
-            price: model.price,
-            leadQuantity: model.leadQuantity,
-            position: model.position,
-            product: model.product,
-            store: model.store,
-            organization: context.organization,
-            batches: model.batches
-        }).save()
-    } else {
-        stock = await update({
-            id: stock.id,
-            quantity: model.quantity,
-            unit: model.unit,
-            position: model.position,
-            price: model.price,
-            leadQuantity: model.leadQuantity,
-            batches: model.batches
-        }, context)
-    }
+    await offline.queue('stock', 'create', entity, context)
 
     log.end()
-    return stock
+    return entity
 }
 
-const getById = async (id, context) => {
-    const log = context.logger.start('services/stock:getById')
+exports.update = async (id, model, context) => {
+    context.logger.debug('services/products:update')
 
-    const stock = await db.stock.findById(id).populate('organization')
+    let entity = await this.get(id, context)
 
-    log.end()
-    return stock
+    await set(model, entity, context)
+    await entity.save()
+
+    await offline.queue('stock', 'update', entity, context)
+
+    return entity
 }
 
-const update = async (model, context) => {
-    const log = context.logger.start('services/stocks:update')
-    const stock = await db.stock.findById(model.id)
-
-    set({
-        quantity: model.quantity,
-        unit: model.unit,
-        position: model.position,
-        price: model.price,
-        leadQuantity: model.leadQuantity
-    }, stock, context)
-    await stock.save()
-    log.end()
-    return getById(stock.id, context)
-}
-
-exports.search = async (query, context) => {
+exports.search = async (query, page, context) => {
     const log = context.logger.start('services/stocks:search')
 
     let productQuery = {}
@@ -140,8 +91,8 @@ exports.search = async (query, context) => {
         'quantity': {
             $gte: query.quantity || 1
         },
-        store: toObjectId(context.store.id),
-        organization: toObjectId(context.organization.id)
+        store: context.store,
+        organization: context.organization
     }
 
     let stocks = await db.stock.aggregate([{
@@ -161,49 +112,66 @@ exports.search = async (query, context) => {
         $limit: 10
     }])
 
+    let items = await db.stock.populate(stocks, 'batches.batch')
+
     log.end()
-    return db.stock.populate(stocks, 'batches.batch')
-}
 
-exports.buildStocks = async (data, context) => {
-    context.logger.start('services/stocks:buildStocks')
-
-    return new db.stock({
-        quantity: data.quantity,
-        location: data.location,
-        price: data.price,
-        leadQuantity: data.leadQuantity,
-        organization: context.organization,
-        store: context.store.id,
-        product: context.product.id,
-        batch: context.batch.id
-    })
-}
-
-const findOneByQuery = async (query, context) => {
-    let log = context.logger.start('services/stocks:getByQuery')
-
-    let clause = context.where().clause
-
-    if (query.product) {
-        clause.product = query.product
+    return {
+        items: items
     }
-
-    let stock = await db.stock.findOne(clause).populate('batches')
-    log.end()
-
-    return stock
 }
 
-const reduceQuantity = async (id, number) => {
+// exports.buildStocks = async (data, context) => {
+//     context.logger.start('services/stocks:buildStocks')
+
+//     return new db.stock({
+//         quantity: data.quantity,
+//         location: data.location,
+//         price: data.price,
+//         leadQuantity: data.leadQuantity,
+//         organization: context.organization,
+//         store: context.store.id,
+//         product: context.product.id,
+//         batch: context.batch.id
+//     })
+// }
+exports.get = async (query, context) => {
+    context.logger.start('services/stocks:get')
+    if (typeof query === 'string') {
+        if (query.isObjectId()) {
+            return db.stock.findById(query).populate(populate)
+        } else {
+            return db.stock.findOne({
+                product: await productService.get(query, context),
+                organization: context.organization
+            }).populate(populate)
+        }
+    }
+    if (query._doc) {
+        return query
+    }
+    if (query.id) {
+        return db.stock.findById(query.id).populate(populate)
+    }
+    if (query.product) {
+        if (query.store) {
+            return db.stock.findOne({
+                product: await productService.get(query.product, context),
+                store: await productService.get(query.store, context),
+                organization: context.organization
+            }).populate(populate)
+        }
+        return db.stock.findOne({
+            product: await productService.get(query.product, context),
+            organization: context.organization
+        }).populate(populate)
+    }
+}
+
+exports.reduce = async (id, number) => {
     return db.stock.update({
         _id: id
     }, {
-            $inc: { quantity: number * -1 }
-        })
+        $inc: { quantity: number * -1 }
+    })
 }
-
-exports.update = update
-exports.getById = getById
-exports.findOneByQuery = findOneByQuery
-exports.reduceQuantity = reduceQuantity

@@ -3,29 +3,17 @@
 const mongoose = require('mongoose')
 
 module.exports = {
-    profile: {
-        firstName: String,
-        lastName: String,
-        pic: {
-            url: String,
-            thumbnail: String
-        },
-        dob: Date,
-        fatherName: String,
-        bloodGroup: String,
-        gender: {
-            type: String,
-            enum: ['male', 'female', 'others']
-        }
-    },
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'user'
     },
-    membership: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'membership'
+    discount: {
+        value: Number,
+        type: {
+            type: String // amount, percentage
+        }
     },
+    status: String,
     organization: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'organization'
